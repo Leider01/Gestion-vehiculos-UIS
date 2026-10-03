@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Portal de Acceso Campus - Carné Digital</title>
+  <!-- Librería para generar código QR -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; }
+    body { background-color: #f1f5f9; color: #1e293b; padding: 20px; display: flex; justify-content: center; min-height: 100vh; }
+    .container { width: 100%; max-width: 600px; }
+    
+    .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 20px; }
+    h2 { font-size: 1.4rem; color: #0f172a; margin-bottom: 6px; }
+    p.sub { color: #64748b; font-size: 0.9rem; margin-bottom: 20px; }
+
+    .campo { margin-bottom: 14px; }
+    label { display: block; font-size: 0.85rem; font-weight: 600; color: #475569; margin-bottom: 4px; }
+    input, select, textarea { width: 100%; padding: 10px; border: 1.5px solid #cbd5e1; border-radius: 8px; font-size: 0.95rem; outline: none; }
+
+    button { background: #2563eb; color: white; border: none; padding: 11px; width: 100%; border-radius: 8px; font-weight: 600; cursor: pointer; }
+    button:hover { background: #1d4ed8; }
+    .btn-secondary { background: #64748b; margin-top: 8px; }
+    .btn-danger { background: #ef4444; width: auto; padding: 6px 12px; font-size: 0.85rem; }
+
+    .tabs { display: flex; gap: 8px; margin-bottom: 15px; overflow-x: auto; padding-bottom: 5px; }
+    .tab-btn { background: #e2e8f0; color: #475569; padding: 8px 14px; border-radius: 20px; border: none; cursor: pointer; font-size: 0.85rem; white-space: nowrap; }
+    .tab-btn.active { background: #2563eb; color: white; }
+
+    #vistaAuth, #vistaApp { display: none; }
+    .header-user { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+
+    /* ESTILOS DEL CARNÉ QR DINÁMICO */
+    .qr-container { text-align: center; padding: 20px; background: #f8fafc; border-radius: 12px; border: 1px dashed #cbd5e1; }
+    #qrcode { display: flex; justify-content: center; margin: 15px 0; }
+    .timer-bar { height: 4px; background: #2563eb; width: 100%; border-radius: 2px; transition: width 1s linear; }
+
+    .grid-vehiculos { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; margin-top: 10px; }
+    .tarjeta-v { border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; background: #f8fafc; text-align: center; }
+    .tarjeta-v img { width: 100%; height: 110px; object-fit: cover; border-radius: 6px; margin-bottom: 8px; }
+
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.85rem; }
+    th, td { padding: 8px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+    th { background: #f8fafc; }
+    .estado-activo { color: #16a34a; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+
+    <!-- AUTENTICACIÓN -->
+    <div id="vistaAuth">
+      <div class="card" id="formLogin">
+        <h2>🔑 Iniciar Sesión</h2>
+        <p class="sub">Acceso para Estudiantes, Profesores y Visitantes</p>
+        <div class="campo">
+          <label>Código o Documento:</label>
+          <input type="text" id="loginCodigo" placeholder="Ej: 2201234">
+        </div>
+        <div class="campo">
+          <label>Contraseña:</label>
+          <input type="password" id="loginPass">
+        </div>
+        <button onclick="iniciarSesion()">Ingresar</button>
+        <button class="btn-secondary" onclick="toggleAuth(true)">¿No tienes cuenta? Regístrate</button>
+      </div>
+
+      <div class="card" id="formRegistro" style="display: none;">
+        <h2>📝 Registro de Usuario</h2>
+        <p class="sub">Crea tu cuenta para generar tu QR de acceso</p>
+        
+        <div class="campo">
+          <label>Tipo de Usuario:</label>
+          <select id="regTipoUsuario" onchange="cambiarTipoUsuario()" required>
+            <option value="Estudiante">Estudiante</option>
+            <option value="Profesor">Profesor</option>
+            <option value="Administrativo">Administrativo</option>
+            <option value="Visitante">Visitante</option>
+          </select>
+        </div>
+
+        <div class="campo">
+          <label id="lblDocumento">Código de Estudiante:</label>
+          <input type="text" id="regDocumento" required placeholder="Ej: 2201234">
+        </div>
+
+        <div class="campo">
+          <label>Nombre Completo:</label>
+          <input type="text" id="regNombre" required placeholder="Ej: Juan Pérez">
+        </div>
+
+        <div class="campo" id="boxCarrera">
+          <label>Programa Académico:</label>
+          <select id="regCarrera">
+            <option value="" disabled selected>Selecciona tu programa...</option>
+            <option value="Biología">Biología</option>
+            <option value="Física">Física</option>
+            <option value="Matemáticas">Matemáticas</option>
+            <option value="Licenciatura en Matemáticas">Licenciatura en Matemáticas</option>
+            <option value="Química">Química</option>
+            <option value="Diseño Industrial">Diseño Industrial</option>
+            <option value="Ingeniería Biomédica">Ingeniería Biomédica</option>
+            <option value="Ingeniería Civil">Ingeniería Civil</option>
+            <option value="Ingeniería en Ciencia de Datos">Ingeniería en Ciencia de Datos</option>
+            <option value="Ingeniería en Inteligencia Artificial">Ingeniería en Inteligencia Artificial</option>
+            <option value="Ingeniería Eléctrica">Ingeniería Eléctrica</option>
+            <option value="Ingeniería Electrónica">Ingeniería Electrónica</option>
+            <option value="Ingeniería Industrial">Ingeniería Industrial</option>
+            <option value="Ingeniería de Sistemas">Ingeniería de Sistemas</option>
+            <option value="Ingeniería Mecánica">Ingeniería Mecánica</option>
+            <option value="Geología">Geología</option>
+            <option value="Ingeniería de Petróleos">Ingeniería de Petróleos</option>
+            <option value="Ingeniería Metalúrgica">Ingeniería Metalúrgica</option>
+            <option value="Ingeniería Química">Ingeniería Química</option>
+            <option value="Economía">Economía</option>
+            <option value="Filosofía">Filosofía</option>
+            <option value="Historia y Archivística">Historia y Archivística</option>
+            <option value="Licenciatura en Educación Básica Primaria">Licenciatura en Educación Básica Primaria</option>
+            <option value="Licenciatura en Lenguas Extranjeras con Énfasis en Inglés">Licenciatura en Lenguas Extranjeras con Énfasis en Inglés</option>
+            <option value="Licenciatura en Literatura y Lengua Castellana">Licenciatura en Literatura y Lengua Castellana</option>
+            <option value="Licenciatura en Música">Licenciatura en Música</option>
+            <option value="Trabajo Social">Trabajo Social</option>
+            <option value="Derecho">Derecho</option>
+          </select>
+        </div>
+
+        <div class="campo" id="boxDependencia" style="display: none;">
+          <label id="lblDependencia">Dependencia / Área:</label>
+          <input type="text" id="regDependencia" placeholder="Ej: Facultad de Ciencias">
+        </div>
+
+        <div class="campo">
+          <label>Contraseña:</label>
+          <input type="password" id="regPass" required>
+        </div>
+
+        <button onclick="registrarUsuario()">Crear Cuenta</button>
+        <button class="btn-secondary" onclick="toggleAuth(false)">Volver al Login</button>
+      </div>
+    </div>
+
+    <!-- PANEL PRINCIPAL DE LA APP -->
+    <div id="vistaApp">
+      <div class="card">
+        <div class="header-user">
+          <div>
+            <h2 id="userName">Hola</h2>
+            <p class="sub" id="userDetails">Rol: --</p>
+          </div>
+          <button class="btn-danger" onclick="cerrarSesion()">Salir</button>
+        </div>
+
+        <div class="tabs">
+          <button class="tab-btn active" onclick="cambiarPestana('qr')">📲 Mi QR de Acceso</button>
+          <button class="tab-btn" onclick="cambiarPestana('vehiculos')">Mis Vehículos</button>
+          <button class="tab-btn" onclick="cambiarPestana('nuevo')">+ Registrar Vehículo</button>
+          <button class="tab-btn" onclick="cambiarPestana('historial')">Historial</button>
+        </div>
+
+        <!-- PESTAÑA 1: QR DINÁMICO -->
+        <div id="tabQR">
+          <div class="qr-container">
+            <h3>Carné Digital Dinámico</h3>
+            <p style="font-size:0.8rem; color:#64748b; margin-top:4px;">Presenta este código en la entrada</p>
+            
+            <div id="qrcode"></div>
+            
+            <div class="timer-bar" id="timerBar"></div>
+            <p style="font-size: 0.75rem; color: #94a3b8; margin-top: 6px;">El código se actualiza automáticamente para evitar capturas</p>
+          </div>
+        </div>
+
+        <!-- PESTAÑA 2: LISTA VEHÍCULOS -->
+        <div id="tabVehiculos" style="display: none;">
+          <div class="grid-vehiculos" id="listaMisVehiculos"></div>
+        </div>
+
+        <!-- PESTAÑA 3: REGISTRAR VEHÍCULO -->
+        <div id="tabNuevo" style="display: none;">
+          <form id="formNuevoVehiculo" enctype="multipart/form-data">
+            <div class="campo">
+              <label>Tipo de Vehículo:</label>
+              <select id="tipo" name="tipo" onchange="evaluarPlaca()">
+                <option value="Carro">Carro</option>
+                <option value="Moto">Moto</option>
+                <option value="Bicicleta">Bicicleta</option>
+                <option value="Monopatín">Monopatín</option>
+              </select>
+            </div>
+            <div class="campo" id="grupoPlaca">
+              <label>Placa:</label>
+              <input type="text" name="placa" placeholder="Ej: ABC123">
+            </div>
+            <div class="campo">
+              <label>Color Principal:</label>
+              <input type="text" name="color" required placeholder="Ej: Negro / Rojo">
+            </div>
+            <div class="campo">
+              <label>Detalles / Observaciones:</label>
+              <textarea name="detalles" rows="2" placeholder="Ej: Pegatina en el casco..."></textarea>
+            </div>
+            <div class="campo">
+              <label>Foto del Vehículo:</label>
+              <input type="file" name="foto" accept="image/*" required>
+            </div>
+            <button type="submit">Guardar Vehículo</button>
+          </form>
+        </div>
+
+        <!-- PESTAÑA 4: HISTORIAL -->
+        <div id="tabHistorial" style="display: none;">
+          <table>
+            <thead>
+              <tr>
+                <th>Vehículo</th>
+                <th>Placa</th>
+                <th>Hora Entrada</th>
+                <th>Hora Salida</th>
+              </tr>
+            </thead>
+            <tbody id="tablaHistorial"></tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    let usuarioSesion = null;
+    let qrcodeObj = null;
+    let timerInterval = null;
+
+    window.onload = () => {
+      const guardado = localStorage.getItem('usuarioCampus');
+      if (guardado) {
+        usuarioSesion = JSON.parse(guardado);
+        mostrarApp();
+      } else {
+        document.getElementById('vistaAuth').style.display = 'block';
+      }
+    };
+
+    function toggleAuth(irARegistro) {
+      document.getElementById('formLogin').style.display = irARegistro ? 'none' : 'block';
+      document.getElementById('formRegistro').style.display = irARegistro ? 'block' : 'none';
+    }
+
+    function cambiarTipoUsuario() {
+      const tipo = document.getElementById('regTipoUsuario').value;
+      const boxCarrera = document.getElementById('boxCarrera');
+      const boxDependencia = document.getElementById('boxDependencia');
+
+      boxCarrera.style.display = (tipo === 'Estudiante') ? 'block' : 'none';
+      boxDependencia.style.display = (tipo !== 'Estudiante') ? 'block' : 'none';
+    }
+
+    async function registrarUsuario() {
+      const tipo_usuario = document.getElementById('regTipoUsuario').value;
+      const documento = document.getElementById('regDocumento').value.trim();
+      const nombre = document.getElementById('regNombre').value.trim();
+      const password = document.getElementById('regPass').value;
+      let vinculacion = tipo_usuario === 'Estudiante' ? document.getElementById('regCarrera').value : document.getElementById('regDependencia').value.trim();
+
+      const res = await fetch('/api/usuario/registro', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ documento, nombre, tipo_usuario, vinculacion, password })
+      });
+      const data = await res.json();
+      alert(data.mensaje || data.error);
+      if (res.ok) toggleAuth(false);
+    }
+
+    async function iniciarSesion() {
+      const documento = document.getElementById('loginCodigo').value.trim();
+      const password = document.getElementById('loginPass').value;
+
+      const res = await fetch('/api/usuario/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ documento, password })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        usuarioSesion = data.usuario;
+        localStorage.setItem('usuarioCampus', JSON.stringify(usuarioSesion));
+        mostrarApp();
+      } else {
+        alert(data.error);
+      }
+    }
+
+    function cerrarSesion() {
+      localStorage.removeItem('usuarioCampus');
+      if (timerInterval) clearInterval(timerInterval);
+      location.reload();
+    }
+
+    function mostrarApp() {
+      document.getElementById('vistaAuth').style.display = 'none';
+      document.getElementById('vistaApp').style.display = 'block';
+      document.getElementById('userName').innerText = `Hola, ${usuarioSesion.nombre}`;
+      document.getElementById('userDetails').innerText = `Rol: ${usuarioSesion.tipo_usuario} | ${usuarioSesion.vinculacion}`;
+      
+      iniciarQRDinamico();
+      cargarMisVehiculos();
+      cargarHistorial();
+    }
+
+    // LÓGICA DEL QR DINÁMICO
+    function generarQRCodigo() {
+      // El QR contiene el documento + timestamp actual para validar caducidad
+      const payload = JSON.stringify({
+        doc: usuarioSesion.documento,
+        time: Date.now()
+      });
+
+      const container = document.getElementById('qrcode');
+      container.innerHTML = '';
+      qrcodeObj = new QRCode(container, {
+        text: payload,
+        width: 180,
+        height: 180
+      });
+    }
+
+    function iniciarQRDinamico() {
+      generarQRCodigo();
+      let tiempoRestante = 30;
+      const bar = document.getElementById('timerBar');
+
+      if (timerInterval) clearInterval(timerInterval);
+
+      timerInterval = setInterval(() => {
+        tiempoRestante--;
+        bar.style.width = `${(tiempoRestante / 30) * 100}%`;
+
+        if (tiempoRestante <= 0) {
+          generarQRCodigo();
+          tiempoRestante = 30;
+          bar.style.width = '100%';
+        }
+      }, 1000);
+    }
+
+    function cambiarPestana(pestana) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      event.target.classList.add('active');
+
+      document.getElementById('tabQR').style.display = pestana === 'qr' ? 'block' : 'none';
+      document.getElementById('tabVehiculos').style.display = pestana === 'vehiculos' ? 'block' : 'none';
+      document.getElementById('tabNuevo').style.display = pestana === 'nuevo' ? 'block' : 'none';
+      document.getElementById('tabHistorial').style.display = pestana === 'historial' ? 'block' : 'none';
+    }
+
+    function evaluarPlaca() {
+      const tipo = document.getElementById('tipo').value;
+      document.getElementById('grupoPlaca').style.display = (tipo === 'Carro' || tipo === 'Moto') ? 'block' : 'none';
+    }
+
+    async function cargarMisVehiculos() {
+      const res = await fetch(`/api/usuario/mis-vehiculos/${usuarioSesion.documento}`);
+      const data = await res.json();
+      const cont = document.getElementById('listaMisVehiculos');
+      cont.innerHTML = '';
+
+      if (!data.vehiculos || data.vehiculos.length === 0) {
+        cont.innerHTML = '<p style="color: #64748b; grid-column: 1/-1;">Aún no has registrado ningún vehículo.</p>';
+        return;
+      }
+
+      data.vehiculos.forEach(v => {
+        cont.innerHTML += `
+          <div class="tarjeta-v">
+            <img src="${v.foto_url || 'https://via.placeholder.com/150'}" alt="Foto">
+            <strong>${v.tipo}</strong>
+            <p style="font-size:0.85rem; color:#64748b;">${v.placa} (${v.color})</p>
+          </div>
+        `;
+      });
+    }
+
+    async function cargarHistorial() {
+      const res = await fetch(`/api/usuario/historial/${usuarioSesion.documento}`);
+      const data = await res.json();
+      const tbody = document.getElementById('tablaHistorial');
+      tbody.innerHTML = '';
+
+      if (!data.historial || data.historial.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">Sin accesos registrados</td></tr>';
+        return;
+      }
+
+      data.historial.forEach(h => {
+        const entrada = new Date(h.hora_entrada).toLocaleString();
+        const salida = h.hora_salida ? new Date(h.hora_salida).toLocaleString() : '<span class="estado-activo">Dentro del Campus</span>';
+        tbody.innerHTML += `
+          <tr>
+            <td><strong>${h.tipo}</strong> (${h.color})</td>
+            <td>${h.placa}</td>
+            <td>${entrada}</td>
+            <td>${salida}</td>
+          </tr>
+        `;
+      });
+    }
+
+    document.getElementById('formNuevoVehiculo').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      formData.append('documento_usuario', usuarioSesion.documento);
+
+      const res = await fetch('/api/usuario/vehiculo', {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = await res.json();
+      alert(data.mensaje || data.error);
+      if (res.ok) {
+        e.target.reset();
+        cargarMisVehiculos();
+        cambiarPestana('vehiculos');
+      }
+    });
+  </script>
+</body>
+</html>
