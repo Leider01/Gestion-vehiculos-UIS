@@ -1,5 +1,8 @@
 # Gestión Vehicular UIS — VigiBot-UIS (PRO-RF-02)
 
+|Leider Yesid Gomez Giraldo - 2232503|
+|David Alejandro Galvis Duarte- 2232522|
+
 Sistema híbrido para la modernización y automatización del control de acceso vehicular (carros, motos, bicicletas y monopatines) en la Universidad Industrial de Santander, utilizando el código QR dinámico del carné digital institucional.
 
 ## Arquitectura Híbrida
