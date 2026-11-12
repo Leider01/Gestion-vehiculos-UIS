@@ -1,4 +1,4 @@
-
+flowchart TD
     A([Inicio: Llegada de vehículo a portería UIS]) --> B[Vigilante detiene el vehículo y solicita carné UIS o documento]
     B --> C{¿Usuario pertenece a la comunidad UIS?}
     
