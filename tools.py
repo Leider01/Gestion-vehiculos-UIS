@@ -1,18 +1,30 @@
+import json
 from datetime import datetime
 from database import get_connection
 
 
-def consultar_historial_estudiante(codigo_estudiantil: str) -> dict:
-    """Consulta los vehículos registrados y los últimos 5 movimientos de un estudiante."""
+def consultar_historial_estudiante(codigo_estudiantil: str) -> str:
+    """Consulta los vehículos registrados (incluyendo placa) y los últimos movimientos de un estudiante."""
     conn = get_connection()
     cursor = conn.cursor()
 
     cursor.execute(
-        "SELECT propietario, tipo_vehiculo, detalles, estado FROM vehiculos WHERE codigo_estudiantil = ?",
+        """
+        SELECT id, propietario, tipo_vehiculo, placa, detalles, estado
+        FROM vehiculos
+        WHERE codigo_estudiantil = ?
+        """,
         (codigo_estudiantil.strip(),),
     )
     vehiculos = [
-        {"propietario": r[0], "tipo": r[1], "detalles": r[2], "estado": r[3]}
+        {
+            "id": r[0],
+            "propietario": r[1],
+            "tipo_vehiculo": r[2],
+            "placa": r[3] or "N/A",
+            "detalles": r[4],
+            "estado": r[5],
+        }
         for r in cursor.fetchall()
     ]
 
@@ -25,71 +37,75 @@ def consultar_historial_estudiante(codigo_estudiantil: str) -> dict:
         """,
         (codigo_estudiantil.strip(),),
     )
-    historial = [
-        {"vehiculo": r[0], "movimiento": r[1], "observacion": r[2], "fecha_hora": r[3]}
+    accesos = [
+        {
+            "tipo_vehiculo": r[0],
+            "tipo_movimiento": r[1],
+            "observacion": r[2],
+            "timestamp": r[3],
+        }
         for r in cursor.fetchall()
     ]
 
     conn.close()
-    return {
-        "codigo_estudiantil": codigo_estudiantil,
-        "vehiculos_registrados": vehiculos,
-        "ultimos_movimientos": historial,
-    }
+    return json.dumps(
+        {
+            "codigo_estudiantil": codigo_estudiantil.strip(),
+            "vehiculos_registrados": vehiculos,
+            "ultimos_accesos": accesos,
+        },
+        ensure_ascii=False,
+    )
 
 
 def registrar_movimiento_estudiante(
     codigo_estudiantil: str,
     tipo_vehiculo: str,
     tipo_movimiento: str,
-    observacion: str = "Gestionado por Agente VigiBot-UIS",
-) -> dict:
-    """Inserta un registro de ENTRADA, SALIDA o cierre administrativo en la tabla accesos."""
+    observacion: str = "Registro supervisado por VigiBot-UIS",
+) -> str:
+    """Registra una ENTRADA o SALIDA vehicular en la tabla accesos de SQLite."""
+    tipo_v = tipo_vehiculo.strip().capitalize()
+    if tipo_v.lower() in ("monopatin", "monopatín"):
+        tipo_v = "Monopatín"
+
+    mov = tipo_movimiento.strip().upper()
+    if mov not in ("ENTRADA", "SALIDA"):
+        mov = "ENTRADA"
+
+    ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     conn = get_connection()
     cursor = conn.cursor()
-    ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
     cursor.execute(
         """
         INSERT INTO accesos (codigo_estudiantil, tipo_vehiculo, tipo_movimiento, observacion, timestamp)
         VALUES (?, ?, ?, ?, ?)
         """,
-        (
-            codigo_estudiantil.strip(),
-            tipo_vehiculo.strip(),
-            tipo_movimiento.strip().upper(),
-            observacion.strip(),
-            ahora,
-        ),
+        (codigo_estudiantil.strip(), tipo_v, mov, observacion.strip(), ahora),
     )
     conn.commit()
     conn.close()
 
-    return {
-        "exito": True,
-        "mensaje": f"Registro '{tipo_movimiento.upper()}' guardado para {codigo_estudiantil} ({tipo_vehiculo}) a las {ahora}.",
-    }
+    return (
+        f"Movimiento guardado: {mov} | Código: {codigo_estudiantil.strip()} | "
+        f"Vehículo: {tipo_v} | Obs: {observacion.strip()} | Hora: {ahora}"
+    )
 
 
-def ejecutar_consulta_sql_lectura(consulta_sql: str) -> dict:
-    """
-    Ejecuta consultas SQL de solo lectura (SELECT) sobre la base de datos
-    para responder preguntas administrativas o de ocupación del campus.
-    Tablas disponibles:
-    - vehiculos(id, codigo_estudiantil, propietario, tipo_vehiculo, detalles, estado)
-    - accesos(id, codigo_estudiantil, tipo_vehiculo, tipo_movimiento, observacion, timestamp)
-    """
-    sql_limpio = consulta_sql.strip()
+def ejecutar_consulta_sql_lectura(consulta_sql: str) -> str:
+    """Ejecuta una consulta SQL de solo lectura (SELECT) sobre la base de datos de portería."""
+    sql_limpio = consulta_sql.strip().rstrip(";")
     if not sql_limpio.upper().startswith("SELECT"):
-        return {"error": "Solo se permiten consultas de lectura que inicien con SELECT."}
+        return "Error: Solo se permiten consultas de lectura que inicien con SELECT."
 
+    conn = get_connection()
+    cursor = conn.cursor()
     try:
-        conn = get_connection()
-        cursor = conn.cursor()
         cursor.execute(sql_limpio)
         columnas = [desc[0] for desc in cursor.description] if cursor.description else []
-        filas = cursor.fetchall()
-        conn.close()
-        return {"columnas": columnas, "resultados": filas}
+        filas = [dict(zip(columnas, fila)) for fila in cursor.fetchall()]
+        return json.dumps(filas[:25], ensure_ascii=False)
     except Exception as e:
-        return {"error": f"Error al ejecutar consulta SQL: {str(e)}"}
+        return f"Error al ejecutar SQL: {str(e)}"
+    finally:
+        conn.close()
