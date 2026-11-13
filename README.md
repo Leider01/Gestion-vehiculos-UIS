@@ -1,4 +1,4 @@
-# [Gestión Vehicular UIS — VigiBot-UIS](https://www.canva.com/design/DAG5119jwYAQ/B_YC-MGX8brhK1yA50BUSQ/edit)
+# [Gestión Vehicular UIS — VigiBot-UIS](https://www.canva.com/design/DAG519jwYAQ/B_YC-MGX8brhK1yA50BUSQ/edit)
 
 Sistema híbrido para la modernización y automatización del control de acceso vehicular (carros, motos, bicicletas y monopatines) en la **Universidad Industrial de Santander**, integrando el código QR dinámico del carné digital institucional, visión por computadora y un agente supervisor con IA.
 
