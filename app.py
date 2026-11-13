@@ -1,5 +1,7 @@
 import base64
 import json
+import cv2
+import numpy as np
 import pandas as pd
 import streamlit as st
 from database import init_db, get_connection
@@ -25,6 +27,24 @@ def generar_qr_simulado(codigo_estudiantil: str) -> str:
     return base64.b64encode(json.dumps(payload).encode("utf-8")).decode("utf-8")
 
 
+def decodificar_qr_imagen(archivo_imagen) -> str | None:
+    """Convierte la captura de cámara en matriz OpenCV y extrae el contenido del QR."""
+    bytes_imagen = np.asarray(bytearray(archivo_imagen.getvalue()), dtype=np.uint8)
+    img = cv2.imdecode(bytes_imagen, cv2.IMREAD_COLOR)
+    if img is None:
+        return None
+
+    detector = cv2.QRCodeDetector()
+    datos, _, _ = detector.detectAndDecode(img)
+
+    # Segundo intento en escala de grises si el brillo de pantalla dificulta la lectura
+    if not datos:
+        gris = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        datos, _, _ = detector.detectAndDecode(gris)
+
+    return datos.strip() if datos else None
+
+
 def cargar_tabla(query: str) -> pd.DataFrame:
     conn = get_connection()
     df = pd.read_sql_query(query, conn)
@@ -46,36 +66,58 @@ with col_izq:
         horizontal=True,
     )
 
-    st.markdown("**Simulación rápida de carné:**")
-    b1, b2 = st.columns(2)
+    tab_camara, tab_simulador = st.tabs(["📷 Cámara en Vivo (OpenCV)", "⌨️ Simulación / Manual"])
 
-    if b1.button("⚡ Escanear 2232504 (1 vehículo)", use_container_width=True):
-        qr = generar_qr_simulado("2232504")
-        with st.spinner("Procesando lectura..."):
-            st.session_state["resultado_escaneo"] = procesar_lectura_rapida(qr, tipo_movimiento)
+    with tab_camara:
+        foto_qr = st.camera_input("Enfoca el código QR del carné digital UIS y toma la captura")
+        if foto_qr is not None:
+            foto_hash = hash(foto_qr.getvalue())
+            if st.session_state.get("ultimo_foto_hash") != foto_hash:
+                st.session_state["ultimo_foto_hash"] = foto_hash
+                contenido_qr = decodificar_qr_imagen(foto_qr)
+                if contenido_qr:
+                    with st.spinner("QR decodificado, validando acceso..."):
+                        st.session_state["resultado_escaneo"] = procesar_lectura_rapida(
+                            contenido_qr, tipo_movimiento
+                        )
+                else:
+                    st.session_state["resultado_escaneo"] = (
+                        "⚠️ No se detectó ningún código QR en la imagen. Acerca más el carné o reduce el brillo de la pantalla."
+                    )
 
-    if b2.button("🤖 Escanear 2232503 (2 vehículos)", use_container_width=True):
-        qr = generar_qr_simulado("2232503")
-        with st.spinner("Ambigüedad detectada, consultando a VigiBot-UIS..."):
-            st.session_state["resultado_escaneo"] = procesar_lectura_rapida(qr, tipo_movimiento)
+    with tab_simulador:
+        st.markdown("**Simulación rápida de carné:**")
+        b1, b2 = st.columns(2)
 
-    with st.form("form_qr_manual"):
-        codigo_manual = st.text_input(
-            "O ingresa un código estudiantil / cadena QR Base64:",
-            placeholder="Ej. 2232504 o eyJJRCI6...",
-        )
-        enviar_qr = st.form_submit_button("Registrar acceso", use_container_width=True)
+        if b1.button("⚡ Escanear 2232504 (1 vehículo)", use_container_width=True):
+            qr = generar_qr_simulado("2232504")
+            with st.spinner("Procesando lectura..."):
+                st.session_state["resultado_escaneo"] = procesar_lectura_rapida(qr, tipo_movimiento)
 
-        if enviar_qr and codigo_manual.strip():
-            entrada = codigo_manual.strip()
-            qr_final = entrada if entrada.startswith("eyJ") else generar_qr_simulado(entrada)
-            with st.spinner("Validando en portería..."):
-                st.session_state["resultado_escaneo"] = procesar_lectura_rapida(qr_final, tipo_movimiento)
+        if b2.button("🤖 Escanear 2232503 (2 vehículos)", use_container_width=True):
+            qr = generar_qr_simulado("2232503")
+            with st.spinner("Ambigüedad detectada, consultando a VigiBot-UIS..."):
+                st.session_state["resultado_escaneo"] = procesar_lectura_rapida(qr, tipo_movimiento)
+
+        with st.form("form_qr_manual"):
+            codigo_manual = st.text_input(
+                "O ingresa un código estudiantil / cadena QR Base64:",
+                placeholder="Ej. 2232504 o eyJJRCI6...",
+            )
+            enviar_qr = st.form_submit_button("Registrar acceso", use_container_width=True)
+
+            if enviar_qr and codigo_manual.strip():
+                entrada = codigo_manual.strip()
+                qr_final = entrada if entrada.startswith("eyJ") else generar_qr_simulado(entrada)
+                with st.spinner("Validando en portería..."):
+                    st.session_state["resultado_escaneo"] = procesar_lectura_rapida(qr_final, tipo_movimiento)
 
     if "resultado_escaneo" in st.session_state:
         res = st.session_state["resultado_escaneo"]
         if res.startswith("⚡"):
             st.success(res)
+        elif res.startswith("⚠️"):
+            st.warning(res)
         else:
             st.info(res)
 
